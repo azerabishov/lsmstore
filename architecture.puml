@@ -1,0 +1,63 @@
+@startuml
+!include https://raw.githubusercontent.com/RicardoNiepel/C4-PlantUML/release/1-0/C4_Component.puml
+
+' This is called C4 Component Diagram
+
+LAYOUT_WITH_LEGEND()
+
+title LSM əsaslı yaddaş arxitekturası
+
+skinparam sequence {
+    ArrowColor Black
+    ArrowFontColor Black
+}
+
+Person(user, "Müştəri")
+
+Boundary(storage, "LSM Saxlama sistemi") {
+
+    System(inmem, "Yaddaşdaxili saxlama") {
+        Component(memtable, "MemTable", "Golang", "Yaddaşdaxili kiçik məlumat snapshotını saxlayır")
+    }
+
+    System(persistent, "Davamlı saxlama") {
+
+        Boundary(commitlog_system, "CommitLog") {
+            Component(commitlogManager, "CommitLog Menecer", "Golang", "Cari açılmış commitlogu idarə edən sistem")
+            ComponentDb(commitlogA, "CommitLog-A", "Golang + FS file", "Əlavə edilmiş məlumatların çeşidlənməmiş log-nu əlavə edilmə ardıcıllığı ilə saxlayır")
+            ComponentDb(commitlogB, "CommitLog-B", "Golang + FS file", "Birincisi diskə yazılarkən istifadə olunan ikinci dərəcəli commitlog")
+        }
+
+        Boundary(sstable_system, "SSTable") {
+            Component(sstable, "SSTable Menecer", "Golang", "Diskdəki məlumatları ayrı-ayrı fayllarda saxlayır, hər sxema üçün bir fayl, timestamp açarı ilə")
+            ComponentDb(dbfile3, "SSTable file ...", "Golang + FS file", "")
+        }
+    }
+
+    Component(dbwriter, "DiskWriter", "Golang", "Commitlogdakı dataları SSTable-ə ötürür")
+    Component(dbreader, "DiskReader", "Golang", "SSTablelərin indeksləri")
+
+    Component(swriter, "StorageWriter", "Golang", "Sistemə yazma məntiqini özündə saxlayır")
+    Component(sreader, "StorageReader", "Golang", "Sistemdən oxuma məntiqini özündə saxlayır")
+}
+
+
+Rel(sstable, dbfile3, "...")
+
+Rel(commitlogManager, commitlogA, " ")
+Rel(commitlogManager, commitlogB, " ")
+
+Rel(dbwriter, commitlogManager, "Commitlog-u oxuyur")
+Rel(dbwriter, sstable, " ")
+Rel(dbreader, sstable, "SSTables-dən məlumatları oxuyur və indeksləşdirir")
+
+Rel(swriter, commitlogManager, "Yazılan məlumatları commitlog-a göndərir")
+Rel(swriter, memtable, "Yazılan məlumatları MemTable-a göndərir")
+Rel(swriter, dbwriter, "SSTable merge prosesini başladır")
+
+Rel(sreader, memtable, "MemTable-dan məlumatları alır")
+Rel(sreader, dbreader, "SSTable-dən məlumatları alır")
+
+Rel(user, sreader, "Məlumat axtarış sorğuları")
+Rel(user, swriter, "Məlumat saxlama sorğuları")
+@enduml
